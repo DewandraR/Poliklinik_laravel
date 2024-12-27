@@ -164,19 +164,25 @@
                         <td class="px-6 py-4 text-center">
                             @if($pasien->status === 'menunggu')
                                 <a href="{{ route('dokter.form-periksa', $pasien->id) }}" 
-                                   class="text-white bg-blue-600 hover:bg-blue-700 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-4 py-2">
+                                class="text-white bg-blue-600 hover:bg-blue-700 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-4 py-2">
                                     Mulai Periksa
                                 </a>
                             @elseif($pasien->status === 'diperiksa')
                                 <a href="{{ route('dokter.form-periksa', $pasien->id) }}" 
-                                   class="text-white bg-green-600 hover:bg-green-700 focus:ring-4 focus:ring-green-300 font-medium rounded-lg text-sm px-4 py-2">
+                                class="text-white bg-green-600 hover:bg-green-700 focus:ring-4 focus:ring-green-300 font-medium rounded-lg text-sm px-4 py-2">
                                     Lanjutkan
                                 </a>
                             @else
-                            <a href="{{ route('dokter.detail-periksa', $pasien->id) }}" 
-                                   class="text-blue-600 hover:text-blue-900">
-                                    Lihat Detail
-                                </a>
+                                <div class="flex items-center justify-center gap-2">
+                                    <a href="{{ route('dokter.detail-periksa', $pasien->id) }}" 
+                                    class="text-white bg-blue-600 hover:bg-blue-700 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-3 py-1.5">
+                                        Lihat Detail
+                                    </a>
+                                    <a href="{{ route('dokter.form-periksa', $pasien->id) }}" 
+                                    class="text-white bg-green-600 hover:bg-green-700 focus:ring-4 focus:ring-green-300 font-medium rounded-lg text-sm px-3 py-1.5">
+                                        Edit Periksa
+                                    </a>
+                                </div>
                             @endif
                         </td>
                     </tr>
