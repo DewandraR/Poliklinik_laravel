@@ -18,6 +18,19 @@
         </div>
     @endif
 
+    <!-- Tambahkan ini untuk menampilkan flash message -->
+    @if(session('error'))
+        <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4" role="alert">
+            {{ session('error') }}
+        </div>
+    @endif
+
+    @if(session('success'))
+        <div class="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 mb-4" role="alert">
+            {{ session('success') }}
+        </div>
+    @endif
+
     <form action="{{ route('dokter.jadwal.store') }}" method="POST" class="bg-white p-6 shadow-md rounded-lg">
         @csrf
         <div class="mb-4">
