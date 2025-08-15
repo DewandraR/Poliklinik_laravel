@@ -21,14 +21,14 @@ class AdminController extends Controller
         $totalPasien = Pasien::count();
         $totalPoli = Poli::count();
         $totalObat = Obat::count();
-        
+
         // Ambil 4 aktivitas terbaru
         $recentActivities = Activity::latest()->take(4)->get();
 
         return view('admin.dashboard', compact(
-            'totalDokter', 
-            'totalPasien', 
-            'totalPoli', 
+            'totalDokter',
+            'totalPasien',
+            'totalPoli',
             'totalObat',
             'recentActivities'
         ));
@@ -88,22 +88,21 @@ class AdminController extends Controller
 
             DB::commit();
             return redirect()->route('admin.dokter')->with('success', 'Dokter berhasil ditambahkan.');
-
         } catch (\Exception $e) {
             DB::rollBack();
             return redirect()->back()
-                           ->withInput()
-                           ->with('error', 'Terjadi kesalahan saat menambahkan dokter: ' . $e->getMessage());
+                ->withInput()
+                ->with('error', 'Terjadi kesalahan saat menambahkan dokter: ' . $e->getMessage());
         }
     }
 
     public function edit($id)
     {
-        $editDokter = Dokter::with(['poli', 'user'])->findOrFail($id);
-        $dokters = Dokter::with(['poli'])->get();
+        $editDokter = Dokter::with('user')->findOrFail($id);
+        $dokters = Dokter::with('poli')->paginate(10);
         $polis = Poli::all();
-        
-        return view('admin.dokter', compact('dokters', 'polis', 'editDokter'));
+
+        return view('admin.dokter', compact('editDokter', 'dokters', 'polis'));
     }
 
     public function update(Request $request, $id)
@@ -121,22 +120,22 @@ class AdminController extends Controller
             DB::beginTransaction();
 
             $dokter = Dokter::findOrFail($id);
-            
-            // Update user if email or password changed
+
+            // Update data user terkait dokter
             if ($request->filled('email') || $request->filled('password')) {
                 $userData = [
                     'name' => $request->nama,
                     'email' => $request->email,
                 ];
-                
+
                 if ($request->filled('password')) {
                     $userData['password'] = Hash::make($request->password);
                 }
-                
+
                 $dokter->user->update($userData);
             }
 
-            // Update dokter
+            // Update data dokter
             $dokter->update([
                 'nama' => $request->nama,
                 'alamat' => $request->alamat,
@@ -144,16 +143,19 @@ class AdminController extends Controller
                 'id_poli' => $request->id_poli,
             ]);
 
+            // Catat aktivitas update
+            $this->logActivity('dokter', 'Mengubah data Dokter: ' . $request->nama);
+
             DB::commit();
             return redirect()->route('admin.dokter')->with('success', 'Dokter berhasil diperbarui.');
-
         } catch (\Exception $e) {
             DB::rollBack();
             return redirect()->back()
-                        ->withInput()
-                        ->with('error', 'Terjadi kesalahan saat memperbarui dokter: ' . $e->getMessage());
+                ->withInput()
+                ->with('error', 'Terjadi kesalahan saat memperbarui dokter: ' . $e->getMessage());
         }
     }
+
 
     public function destroy($id)
     {
@@ -161,21 +163,25 @@ class AdminController extends Controller
             DB::beginTransaction();
 
             $dokter = Dokter::findOrFail($id);
-            
-            // Delete associated user
+            $namaDokter = $dokter->nama; // Simpan nama sebelum dihapus
+
+            // Hapus user terkait
             if ($dokter->user) {
                 $dokter->user->delete();
             }
-            
-            // Delete dokter
+
+            // Hapus dokter
             $dokter->delete();
+
+            // Catat aktivitas penghapusan
+            $this->logActivity('dokter', 'Menghapus data Dokter: ' . $namaDokter);
 
             DB::commit();
             return redirect()->route('admin.dokter')->with('success', 'Dokter berhasil dihapus.');
-
         } catch (\Exception $e) {
             DB::rollBack();
-            return redirect()->back()->with('error', 'Terjadi kesalahan saat menghapus dokter: ' . $e->getMessage());
+            return redirect()->back()
+                ->with('error', 'Terjadi kesalahan saat menghapus dokter: ' . $e->getMessage());
         }
     }
 
@@ -187,11 +193,11 @@ class AdminController extends Controller
         $tahun = date('Y');
         $bulan = date('m');
         $prefix = $tahun . $bulan . '-';
-        
+
         // Cari nomor RM terakhir dengan prefix tahun dan bulan yang sama
         $lastRM = Pasien::where('no_rm', 'like', $prefix . '%')
-                        ->orderBy('no_rm', 'desc')
-                        ->first();
+            ->orderBy('no_rm', 'desc')
+            ->first();
 
         if ($lastRM) {
             // Jika sudah ada, ambil 3 digit terakhir dan tambahkan 1
@@ -233,10 +239,10 @@ class AdminController extends Controller
             $tahun = date('Y');
             $bulan = date('m');
             $prefix = $tahun . $bulan . '-';
-            
+
             $lastRM = Pasien::where('no_rm', 'like', $prefix . '%')
-                            ->orderBy('no_rm', 'desc')
-                            ->first();
+                ->orderBy('no_rm', 'desc')
+                ->first();
 
             if ($lastRM) {
                 $lastNumber = intval(substr($lastRM->no_rm, -3));
@@ -261,28 +267,27 @@ class AdminController extends Controller
 
             DB::commit();
             return redirect()->route('admin.pasien')->with('success', 'Pasien berhasil ditambahkan.');
-
         } catch (\Exception $e) {
             DB::rollBack();
             return redirect()->back()
-                        ->withInput()
-                        ->with('error', 'Terjadi kesalahan saat menambahkan pasien: ' . $e->getMessage());
+                ->withInput()
+                ->with('error', 'Terjadi kesalahan saat menambahkan pasien: ' . $e->getMessage());
         }
     }
 
     public function editPasien($id)
     {
         $editPasien = Pasien::with('user')->findOrFail($id);
-        $pasiens = Pasien::latest()->get();
-        
+        $pasiens = Pasien::paginate(10);
+
         // Generate nomor RM untuk form tambah (tetap diperlukan untuk form tambah)
         $tahun = date('Y');
         $bulan = date('m');
         $prefix = $tahun . $bulan . '-';
-        
+
         $lastRM = Pasien::where('no_rm', 'like', $prefix . '%')
-                        ->orderBy('no_rm', 'desc')
-                        ->first();
+            ->orderBy('no_rm', 'desc')
+            ->first();
 
         if ($lastRM) {
             $lastNumber = intval(substr($lastRM->no_rm, -3));
@@ -311,18 +316,18 @@ class AdminController extends Controller
             DB::beginTransaction();
 
             $pasien = Pasien::findOrFail($id);
-            
-            // Update user if email or password changed
+
+            // Update user jika email atau password berubah
             if ($request->filled('email') || $request->filled('password')) {
                 $userData = [
                     'name' => $request->nama,
                     'email' => $request->email,
                 ];
-                
+
                 if ($request->filled('password')) {
                     $userData['password'] = Hash::make($request->password);
                 }
-                
+
                 $pasien->user->update($userData);
             }
 
@@ -334,14 +339,16 @@ class AdminController extends Controller
                 'no_hp' => $request->no_hp,
             ]);
 
+            // Catat aktivitas edit pasien
+            $this->logActivity('pasien', 'Mengubah data Pasien: ' . $request->nama);
+
             DB::commit();
             return redirect()->route('admin.pasien')->with('success', 'Pasien berhasil diperbarui.');
-
         } catch (\Exception $e) {
             DB::rollBack();
             return redirect()->back()
-                        ->withInput()
-                        ->with('error', 'Terjadi kesalahan saat memperbarui pasien: ' . $e->getMessage());
+                ->withInput()
+                ->with('error', 'Terjadi kesalahan saat memperbarui pasien: ' . $e->getMessage());
         }
     }
 
@@ -351,12 +358,18 @@ class AdminController extends Controller
             DB::beginTransaction();
 
             $pasien = Pasien::with('user')->findOrFail($id);
-            $pasien->user()->delete(); // Menghapus data pengguna (user)
-            $pasien->delete(); // Menghapus data pasien
+            $namaPasien = $pasien->nama; // simpan nama sebelum dihapus
+
+            // Hapus data pengguna terkait
+            $pasien->user()->delete();
+            // Hapus data pasien
+            $pasien->delete();
+
+            // Catat aktivitas hapus pasien
+            $this->logActivity('pasien', 'Menghapus data Pasien: ' . $namaPasien);
 
             DB::commit();
             return redirect()->route('admin.pasien')->with('success', 'Pasien berhasil dihapus.');
-
         } catch (\Exception $e) {
             DB::rollBack();
             return redirect()->back()->with('error', 'Terjadi kesalahan saat menghapus pasien: ' . $e->getMessage());
@@ -392,15 +405,15 @@ class AdminController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
             return redirect()->back()
-                        ->withInput()
-                        ->with('error', 'Terjadi kesalahan saat menambahkan poli: ' . $e->getMessage());
+                ->withInput()
+                ->with('error', 'Terjadi kesalahan saat menambahkan poli: ' . $e->getMessage());
         }
     }
 
     public function editPoli($id)
     {
         $editPoli = Poli::findOrFail($id);
-        $polis = Poli::all();
+        $polis = Poli::paginate(10);
         return view('admin.poli', compact('editPoli', 'polis'));
     }
 
@@ -420,13 +433,16 @@ class AdminController extends Controller
                 'keterangan' => $request->keterangan,
             ]);
 
+            // Catat aktivitas edit poli
+            $this->logActivity('poli', 'Mengubah data Poli: ' . $request->nama_poli);
+
             DB::commit();
             return redirect()->route('admin.poli')->with('success', 'Poli berhasil diperbarui.');
         } catch (\Exception $e) {
             DB::rollBack();
             return redirect()->back()
-                        ->withInput()
-                        ->with('error', 'Terjadi kesalahan saat memperbarui poli: ' . $e->getMessage());
+                ->withInput()
+                ->with('error', 'Terjadi kesalahan saat memperbarui poli: ' . $e->getMessage());
         }
     }
 
@@ -436,7 +452,12 @@ class AdminController extends Controller
             DB::beginTransaction();
 
             $poli = Poli::findOrFail($id);
+            $namaPoli = $poli->nama_poli; // Simpan nama sebelum dihapus
+
             $poli->delete();
+
+            // Catat aktivitas hapus poli
+            $this->logActivity('poli', 'Menghapus data Poli: ' . $namaPoli);
 
             DB::commit();
             return redirect()->route('admin.poli')->with('success', 'Poli berhasil dihapus.');
@@ -445,6 +466,7 @@ class AdminController extends Controller
             return redirect()->back()->with('error', 'Terjadi kesalahan saat menghapus poli: ' . $e->getMessage());
         }
     }
+
 
     // obat
     public function manageObat()
@@ -477,15 +499,15 @@ class AdminController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
             return redirect()->back()
-                        ->withInput()
-                        ->with('error', 'Terjadi kesalahan saat menambahkan obat: ' . $e->getMessage());
+                ->withInput()
+                ->with('error', 'Terjadi kesalahan saat menambahkan obat: ' . $e->getMessage());
         }
     }
 
     public function editObat($id)
     {
         $editObat = Obat::findOrFail($id);
-        $obats = Obat::all();
+        $obats = Obat::paginate(10);
         return view('admin.obat', compact('editObat', 'obats'));
     }
 
@@ -507,13 +529,16 @@ class AdminController extends Controller
                 'harga' => $request->harga,
             ]);
 
+            // Catat aktivitas edit obat
+            $this->logActivity('obat', 'Mengubah data Obat: ' . $request->nama_obat);
+
             DB::commit();
             return redirect()->route('admin.obat')->with('success', 'Obat berhasil diperbarui.');
         } catch (\Exception $e) {
             DB::rollBack();
             return redirect()->back()
-                        ->withInput()
-                        ->with('error', 'Terjadi kesalahan saat memperbarui obat: ' . $e->getMessage());
+                ->withInput()
+                ->with('error', 'Terjadi kesalahan saat memperbarui obat: ' . $e->getMessage());
         }
     }
 
@@ -523,7 +548,12 @@ class AdminController extends Controller
             DB::beginTransaction();
 
             $obat = Obat::findOrFail($id);
+            $namaObat = $obat->nama_obat; // Simpan nama sebelum dihapus
+
             $obat->delete();
+
+            // Catat aktivitas hapus obat
+            $this->logActivity('obat', 'Menghapus data Obat: ' . $namaObat);
 
             DB::commit();
             return redirect()->route('admin.obat')->with('success', 'Obat berhasil dihapus.');
